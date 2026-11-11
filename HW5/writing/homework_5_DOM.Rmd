@@ -1,0 +1,107 @@
+---
+title: "Homework 5 ERHS 565"
+author: "Dominikus Atmaka"
+date: "November 11"
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Load the Package
+
+```{r}
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(purrr)
+library(tidyr)
+library(broom)
+```
+
+# Section 1: read the data from Washington Post Homicide Repocitory and create city_name column
+
+```{r}
+homicides <- read_csv("https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv") %>%
+  mutate(city_name = paste0(city, ", ", state))
+
+head(homicides)
+```
+
+# Section 2: create unsolved homicides by city dataframe ("Closed without arrest" or "Open/No arrest")
+
+```{r}
+unsolved <- homicides %>%
+  group_by(city_name) %>%
+  summarize(total_homicides = n(),
+            unsolved_homicides = sum(disposition %in% c("Closed without arrest",
+                                                        "Open/No arrest")))
+
+unsolved
+```
+
+From data above we can calculate the number of unsolved homicides for each cities and states. Like in example, in Albuquerque NM, from total of 378 homicides, there are 146 cases remain unsolved (either closed without arrest or open or no arrest).
+
+# Section 3:  proportion of unsolved homicides for Baltimore, MD
+
+```{r}
+baltimore <- unsolved %>%
+  filter(city_name == "Baltimore, MD")
+
+baltimore_test <- prop.test(x = baltimore$unsolved_homicides,
+                            n = baltimore$total_homicides)
+
+baltimore_test
+
+baltimore_tidy <- tidy(baltimore_test)
+baltimore_tidy
+
+baltimore_tidy %>%
+  select(estimate, conf.low, conf.high)
+```
+
+Estimate = 0.6455607 (64.6%);
+p-value = 6.461911e-54 (<0.001);
+CI95% = 0.6275625	- 0.6631599 (62.8% - 66.3%).
+From proportion data above, we can calculate that around 64.6% homicides in Baltimore, MD is remain unsolved. Looking to the p-value which is under 0.05, therefore, we can reject the null hypothesis. So we can conclude that we have strong evidence that from all homicides cases in Baltimore, majority cases will be unsolved.
+
+# Section 4: running prop.test for all cities
+
+```{r}
+unsolved_by_city <- unsolved %>%
+  filter(city_name != "Tulsa, AL") %>%
+  mutate(test_output  = map2(unsolved_homicides, total_homicides, prop.test),
+         tidy_output  = map(test_output, tidy)) %>%
+  unnest(cols = c(tidy_output)) %>%
+  select(city_name, estimate, conf.low, conf.high) %>%
+  mutate(city_name = fct_reorder(city_name, estimate))
+
+head(unsolved_by_city)
+
+unsolved_by_city %>%
+  slice_max(order_by = estimate, n = 1)
+
+unsolved_by_city %>%
+  slice_min(order_by = estimate, n = 1)
+```
+
+I check on the dataset of unsolved and found Tulsa, AL has no unsolved cases. If we still involved Tulsa, AL in the data, the proportion test for Tulsa will resulting a 0% case. Therefore, I first filter the Tulsa, AL from the list before run the proportion test for all cities. Data above is the calculation of proportion for all cities. We can see Chicago, IL has the highest unsolved homicide cases with 73.6% cases and Richmond, VA has the lowest unsolved homicide cases with 26.3% cases.
+
+# Section 5: making plot of unsolved homicides by city
+
+```{r, fig.width = 7, fig.height = 8}
+unsolved_by_city %>%
+  ggplot(aes(x = estimate, y = city_name)) +
+  geom_point(color = "white") +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                 height = 0, color = "white") +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "Percent of homicides that are unsolved",
+       y = NULL,
+       title = "Unsolved homicides by city",
+       subtitle = "Bars show 95% confidence interval") +
+  theme_dark()
+```
+
+From plot above we can see the distribution of unsolved cases of homicides of each cities and states (from 50 states --> exclude the Tulsa, AL).
