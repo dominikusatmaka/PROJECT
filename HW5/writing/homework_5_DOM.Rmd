@@ -127,17 +127,166 @@ top_races
 baltimore_map <- baltimore_homicides %>%
   semi_join(top_races, by = "victim_race")
 
+baltimore_map <- baltimore_map %>%
+  mutate(
+    status = case_when(
+      disposition %in% c("Closed by arrest") ~ "Solved",
+      disposition %in% c("Closed without arrest",
+                         "Open/No arrest") ~ "Unsolved",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(status))
 
+baltimore_sf <- st_as_sf(
+  baltimore_map,
+  coords = c("lon", "lat"),
+  crs = 4326,
+  remove = FALSE
+)
 
+options(tigris_use_cache = TRUE)
 
+baltimore_city <- tigris::places(
+  state = "MD",
+  year = 2020,
+  class = "sf"
+) %>%
+  filter(NAME == "Baltimore city")
 
+ggplot() +
+  geom_sf(
+    data = baltimore_city,
+    fill = "grey90",
+    color = "grey50",
+    linewidth = 0.4
+  ) +
+  geom_sf(
+    data = baltimore_sf,
+    aes(color = victim_race),
+    alpha = 0.65,
+    size = 1.2
+  ) +
+  facet_wrap(~status) +
+  labs(
+    title = "Homicide locations in Baltimore, Maryland",
+    subtitle = "Homicides are shown for the three most common race groups",
+    color = "victim_race",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_line(color = "grey90"),
+    strip.text = element_text(face = "bold")
+  )
+
+```
+
+```{r}
 homicides <- homicides %>%
   mutate(
     date = ymd(as.character(.data$reported_date)))
 
 baltimore_monthly <- homicides %>%
   filter(city == "Baltimore") %>%
-  mutate(month = lubridate::month(date, label = TRUE)) %>%
-  count(month)
+  mutate(
+    month = floor_date(date, unit = "month")
+  ) %>%
+  count(month, name = "homicides")
+
+baltimore_monthly <- baltimore_monthly %>%
+  mutate(
+    month_number = month(month),
+    season = case_when(
+      month_number %in% c(11, 12, 1, 2, 3, 4) ~ "Cold months",
+      month_number %in% c(5, 6, 7, 8, 9, 10) ~ "Warm months"
+    )
+  )
+
+freddie_gray_arrest <- ymd("20150412")
+
+ggplot(
+  baltimore_monthly,
+  aes(x = month, y = homicides)
+) +
+  
+  geom_rect(
+    data = baltimore_monthly %>%
+      group_by(season) %>%
+      summarize(
+        xmin = min(month),
+        xmax = max(month) + months(1),
+        .groups = "drop"
+      ),
+    aes(
+      xmin = xmin,
+      xmax = xmax,
+      ymin = -Inf,
+      ymax = Inf,
+      fill = season
+    ),
+    alpha = 0.15,
+    inherit.aes = FALSE
+  ) +
+  
+  geom_line(
+    linewidth = 0.6
+  ) +
+  
+  geom_point(
+    size = 1.5
+  ) +
+  
+  geom_smooth(
+    method = "loess",
+    formula = y ~ x,
+    se = FALSE,
+    linewidth = 1
+  ) +
+  
+  geom_vline(
+    xintercept = as.numeric(freddie_gray_arrest),
+    linetype = "dashed",
+    linewidth = 0.8
+  ) +
+  
+  annotate(
+    "text",
+    x = freddie_gray_arrest,
+    y = max(baltimore_monthly$homicides),
+    label = "Freddie Gray arrest",
+    angle = 90,
+    vjust = -0.5,
+    hjust = 1
+  ) +
+  
+  scale_fill_manual(
+    values = c(
+      "Cold months" = "lightblue",
+      "Warm months" = "orange"
+    )
+  ) +
+  
+  scale_x_date(
+    date_breaks = "1 year",
+    date_labels = "%Y"
+  ) +
+  
+  labs(
+    title = "Monthly homicides in Baltimore",
+    subtitle = "Cold months: November–April; Warm months: May–October",
+    x = NULL,
+    y = "Number of homicides per month",
+    fill = "Season"
+  ) +
+  
+  theme_minimal() +
+  
+  theme(
+    legend.position = "top",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  )
 ```
 
