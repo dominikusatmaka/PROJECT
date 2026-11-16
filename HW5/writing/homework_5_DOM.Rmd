@@ -125,7 +125,12 @@ top_races <- baltimore_homicides %>%
 top_races
 
 baltimore_map <- baltimore_homicides %>%
-  semi_join(top_races, by = "race")
+  semi_join(top_races, by = "victim_race")
+
+
+
+
+
 homicides <- homicides %>%
   mutate(
     date = ymd(as.character(.data$reported_date)))
