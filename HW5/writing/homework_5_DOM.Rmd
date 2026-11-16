@@ -18,6 +18,8 @@ library(ggplot2)
 library(purrr)
 library(tidyr)
 library(broom)
+library(lubridate)
+library(scales)
 ```
 
 # Section 1: read the data from Washington Post Homicide Repocitory and create city_name column
@@ -105,3 +107,32 @@ unsolved_by_city %>%
 ```
 
 From plot above we can see the distribution of unsolved cases of homicides of each cities and states (from 50 states --> exclude the Tulsa, AL).
+
+## HOMEWORK 5
+
+```{r}
+library(sf)
+library(tigris)
+library(patchwork)
+
+baltimore_homicides <- homicides %>%
+  filter(city_name == "Baltimore, MD")
+
+top_races <- baltimore_homicides %>%
+  count(victim_race, sort = TRUE) %>%
+  slice_head(n = 3)
+
+top_races
+
+baltimore_map <- baltimore_homicides %>%
+  semi_join(top_races, by = "race")
+homicides <- homicides %>%
+  mutate(
+    date = ymd(as.character(.data$reported_date)))
+
+baltimore_monthly <- homicides %>%
+  filter(city == "Baltimore") %>%
+  mutate(month = lubridate::month(date, label = TRUE)) %>%
+  count(month)
+```
+
